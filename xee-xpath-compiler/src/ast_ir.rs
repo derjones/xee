@@ -345,6 +345,15 @@ impl<'a> IrConverter<'a> {
     }
 
     fn binary_expr(&mut self, ast: &ast::BinaryExpr, span: Span) -> error::SpannedResult<Bindings> {
+        // and/or must not evaluate the operand that cannot influence the
+        // result anymore, so a dynamic error in it does not surface
+        // (XPath 3.1 §3.8.1; Saxon behaves the same way).
+        if matches!(
+            ast.operator,
+            ast::BinaryOperator::And | ast::BinaryOperator::Or
+        ) {
+            return self.short_circuit_binary_expr(ast, span);
+        }
         let mut left_bindings = self.path_expr(&ast.left)?;
         let mut right_bindings = self.path_expr(&ast.right)?;
         let op = self.binary_op(ast.operator);
@@ -356,6 +365,66 @@ impl<'a> IrConverter<'a> {
         let binding = self.variables.new_binding(expr, span);
 
         Ok(left_bindings.concat(right_bindings).bind(binding))
+    }
+
+    /// Lower `A and B` / `A or B` to an if-expression so the right operand is
+    /// only evaluated when it can influence the result:
+    ///   `A and B` → `if (A) then ebv(B) else false`
+    ///   `A or B`  → `if (A) then true    else ebv(B)`
+    /// Boolean constants / ebv() are expressed through the existing Binary
+    /// instruction (which applies the effective boolean value to both sides):
+    /// `1 and X` ≡ ebv(X), `1 and 1` ≡ true, `() or ()` ≡ false.
+    fn short_circuit_binary_expr(
+        &mut self,
+        ast: &ast::BinaryExpr,
+        span: Span,
+    ) -> error::SpannedResult<Bindings> {
+        let is_and = matches!(ast.operator, ast::BinaryOperator::And);
+        let one =
+            || -> AtomS { Spanned::new(ir::Atom::Const(ir::Const::Integer(1.into())), span) };
+        let empty = || -> AtomS { Spanned::new(ir::Atom::Const(ir::Const::EmptySequence), span) };
+
+        let mut condition_bindings = self.path_expr(&ast.left)?;
+
+        // ebv(B), computed lazily inside the taken branch.
+        let mut right_bindings = self.path_expr(&ast.right)?;
+        let rhs_expr = ir::Expr::Binary(ir::Binary {
+            left: one(),
+            op: ir::BinaryOperator::And,
+            right: right_bindings.atom(),
+        });
+        let rhs_binding = self.variables.new_binding(rhs_expr, span);
+        let lazy_branch = right_bindings.bind(rhs_binding).expr();
+
+        let const_true = Spanned::new(
+            ir::Expr::Binary(ir::Binary {
+                left: one(),
+                op: ir::BinaryOperator::And,
+                right: one(),
+            }),
+            span,
+        );
+        let const_false = Spanned::new(
+            ir::Expr::Binary(ir::Binary {
+                left: empty(),
+                op: ir::BinaryOperator::Or,
+                right: empty(),
+            }),
+            span,
+        );
+
+        let (then, else_) = if is_and {
+            (Box::new(lazy_branch), Box::new(const_false))
+        } else {
+            (Box::new(const_true), Box::new(lazy_branch))
+        };
+        let expr = ir::Expr::If(ir::If {
+            condition: condition_bindings.atom(),
+            then,
+            else_,
+        });
+        let binding = self.variables.new_binding(expr, span);
+        Ok(condition_bindings.bind(binding))
     }
 
     fn binary_op(&mut self, operator: ast::BinaryOperator) -> ir::BinaryOperator {

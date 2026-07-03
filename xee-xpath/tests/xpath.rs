@@ -354,6 +354,41 @@ fn test_predicate_with_multi_atomic_sequence_value_errors() {
 }
 
 #[test]
+fn test_and_short_circuits_dynamic_error() {
+    // XPath 3.1 §3.8.1: if one operand already decides the result, an error
+    // in the other operand need not be raised. Common schematron idiom:
+    // a guard followed by an expression that errors on absent data.
+    let seq = run("false() and (xs:integer('') eq 1)").unwrap();
+    assert!(!seq.effective_boolean_value().unwrap());
+}
+
+#[test]
+fn test_or_short_circuits_dynamic_error() {
+    let seq = run("true() or (xs:integer('') eq 1)").unwrap();
+    assert!(seq.effective_boolean_value().unwrap());
+}
+
+#[test]
+fn test_and_or_yield_booleans() {
+    // The short-circuit lowering must still produce proper xs:boolean values
+    // from the operands' effective boolean values.
+    let seq = run("string(2 and 'x'), string(0 or ()), string(() or 3)").unwrap();
+    assert_eq!(
+        seq.iter()
+            .map(|i| i.to_atomic().unwrap().to_string().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["true", "false", "true"]
+    );
+}
+
+#[test]
+fn test_and_or_error_still_raised_when_needed() {
+    // When the erroring operand IS needed, the error must surface.
+    let result = run("true() and (xs:integer('') eq 1)");
+    assert!(result.is_err());
+}
+
+#[test]
 fn test_comma_simple_map() {
     assert_debug_snapshot!(run("(1, 2), (3, 4) ! (. + 1)"));
 }

@@ -1045,11 +1045,15 @@ impl<'a> Interpreter<'a> {
 
     fn pop_is_numeric(&mut self) -> error::Result<bool> {
         let value = self.state.pop()?;
-        let a = value.atomized_option(self.state.xot())?;
-        if let Some(a) = a {
-            Ok(a.is_numeric())
-        } else {
-            Ok(false)
+        // Only a singleton numeric value selects by position in a predicate.
+        // A sequence of length != 1 can never be numeric, so report "not
+        // numeric" and let the effective-boolean-value path decide (nodes →
+        // true, multiple atomics → FORG0006 there). Previously this raised
+        // XPTY0004 from atomization for e.g. `a[b]` with two `b` children.
+        match value.atomized_option(self.state.xot()) {
+            Ok(Some(a)) => Ok(a.is_numeric()),
+            Ok(None) => Ok(false),
+            Err(_) => Ok(false),
         }
     }
 

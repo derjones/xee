@@ -338,6 +338,22 @@ fn test_predicate_multiple() {
 }
 
 #[test]
+fn test_predicate_with_multi_node_sequence_value() {
+    // A predicate whose value is a sequence of more than one node filters by
+    // its effective boolean value (true). This used to raise XPTY0004 because
+    // the is-numeric check atomized the sequence before the EBV path ran.
+    let seq = run_xml("<a><b><c/><c/></b></a>", "count(/a/b[c]) = 1").unwrap();
+    assert!(seq.effective_boolean_value().unwrap());
+}
+
+#[test]
+fn test_predicate_with_multi_atomic_sequence_value_errors() {
+    // Multiple atomic values still fail the effective boolean value (FORG0006).
+    let result = run_xml("<a><b><c/><c/></b></a>", "/a/b[(1, 2)]");
+    assert!(result.is_err());
+}
+
+#[test]
 fn test_comma_simple_map() {
     assert_debug_snapshot!(run("(1, 2), (3, 4) ! (. + 1)"));
 }

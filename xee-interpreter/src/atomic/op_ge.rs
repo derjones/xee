@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use ordered_float::OrderedFloat;
+
 use crate::error;
 
 use super::cast_binary::cast_binary_compare;
@@ -25,8 +27,8 @@ impl AtomicCompare for OpGe {
         match (a, b) {
             (Decimal(a), Decimal(b)) => Ok(a >= b),
             (Integer(_, a), Integer(_, b)) => Ok(a >= b),
-            (Float(a), Float(b)) => Ok(a >= b),
-            (Double(a), Double(b)) => Ok(a >= b),
+            (Float(OrderedFloat(a)), Float(OrderedFloat(b))) => Ok(a >= b),
+            (Double(OrderedFloat(a)), Double(OrderedFloat(b))) => Ok(a >= b),
             (Boolean(a), Boolean(b)) => Ok(a >= b),
             (String(_, a), String(_, b)) => Ok(string_compare(a.as_ref(), b.as_ref()).is_ge()),
             (Date(a), Date(b)) => Ok(a

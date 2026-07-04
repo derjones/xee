@@ -369,6 +369,36 @@ fn test_or_short_circuits_dynamic_error() {
 }
 
 #[test]
+fn test_nan_comparisons_are_false() {
+    // XPath 3.1 §4.7.2 (op:numeric-less-than etc.): NaN compared with any
+    // value yields false for <, <=, >, >= and =; only != yields true.
+    // Regression: OrderedFloat's total order sorted NaN greater than all
+    // numbers, so `number(()) > 0` was true.
+    for (expr, expected) in [
+        ("xs:double('NaN') > 0", false),
+        ("xs:double('NaN') >= 0", false),
+        ("xs:double('NaN') < 0", false),
+        ("xs:double('NaN') <= 0", false),
+        ("0 > xs:double('NaN')", false),
+        ("0 < xs:double('NaN')", false),
+        ("xs:double('NaN') gt xs:double('NaN')", false),
+        ("xs:double('NaN') = xs:double('NaN')", false),
+        ("xs:double('NaN') != xs:double('NaN')", true),
+        ("xs:float('NaN') gt 0e0", false),
+        ("xs:float('NaN') lt 0e0", false),
+        ("number(()) > 0", false),
+        ("not(number(()) > 0)", true),
+    ] {
+        let seq = run(expr).unwrap();
+        assert_eq!(
+            seq.effective_boolean_value().unwrap(),
+            expected,
+            "expr: {expr}"
+        );
+    }
+}
+
+#[test]
 fn test_and_or_yield_booleans() {
     // The short-circuit lowering must still produce proper xs:boolean values
     // from the operands' effective boolean values.

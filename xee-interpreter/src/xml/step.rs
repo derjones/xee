@@ -45,6 +45,15 @@ fn node_take_axis<'a>(
     xot: &'a Xot,
     node: xot::Node,
 ) -> Box<dyn Iterator<Item = xot::Node> + 'a> {
+    // xot's DescendantOrSelf iterator omits `self` for attribute nodes;
+    // XDM 5.4 defines descendant-or-self to always include the node itself
+    // (attributes have no descendants, so the axis is exactly `self` there).
+    // QT3: prod-AxisStep/Axes041-1.
+    if matches!(axis, ast::Axis::DescendantOrSelf)
+        && matches!(xot.value_type(node), ValueType::Attribute | ValueType::Namespace)
+    {
+        return Box::new(std::iter::once(node));
+    }
     let axis = convert_axis(axis);
     xot.axis(axis, node)
 }

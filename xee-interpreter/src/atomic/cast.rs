@@ -26,7 +26,9 @@ impl atomic::Atomic {
     }
 
     pub(crate) fn parse_boolean(s: &str) -> error::Result<bool> {
-        match s {
+        // XML Schema whiteSpace facet is `collapse` for xs:boolean
+        // (QT3: K-SeqExprCast-1212).
+        match s.trim() {
             "true" => Ok(true),
             "false" => Ok(false),
             "1" => Ok(true),

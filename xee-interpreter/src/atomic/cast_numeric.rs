@@ -54,6 +54,10 @@ impl atomic::Atomic {
     }
 
     pub(crate) fn parse_decimal(s: &str) -> error::Result<Decimal> {
+        // XML Schema whiteSpace facet is `collapse` for all non-string
+        // atomic types: leading/trailing whitespace is stripped before the
+        // lexical form is parsed (QT3: K-SeqExprCast-536).
+        let s = s.trim();
         if s.contains('_') {
             return Err(error::Error::FORG0001);
         }
@@ -64,6 +68,8 @@ impl atomic::Atomic {
     where
         V: lexical::FromLexical,
     {
+        // whiteSpace facet `collapse` (QT3: K-SeqExprCast-588).
+        let s = s.trim();
         // -0 should count as a 0, so it doesn't fail even for unsigned
         // numbers. There doesn't appear to be a configuration option for
         // lexical for this.
@@ -75,6 +81,8 @@ impl atomic::Atomic {
     // which is allowed by the XML Schema spec
 
     pub(crate) fn parse_float(s: &str) -> error::Result<f32> {
+        // whiteSpace facet `collapse`, as for xs:double below.
+        let s = s.trim();
         let options = lexical::ParseFloatOptionsBuilder::new()
             .inf_string(Some(b"INF"))
             .build()
@@ -84,6 +92,9 @@ impl atomic::Atomic {
     }
 
     pub(crate) fn parse_double(s: &str) -> error::Result<f64> {
+        // whiteSpace facet `collapse`; some call sites trim untyped input
+        // already, but the lexical parse itself must accept padded forms too.
+        let s = s.trim();
         let options = lexical::ParseFloatOptionsBuilder::new()
             .inf_string(Some(b"INF"))
             .build()
@@ -499,7 +510,8 @@ impl FromStr for Parsed<IBig> {
     type Err = error::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Parsed(s.parse().map_err(|_| error::Error::FOCA0003)?))
+        // whiteSpace facet `collapse`, like the other numeric parses.
+        Ok(Parsed(s.trim().parse().map_err(|_| error::Error::FOCA0003)?))
     }
 }
 

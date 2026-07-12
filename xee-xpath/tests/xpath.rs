@@ -399,6 +399,40 @@ fn test_nan_comparisons_are_false() {
 }
 
 #[test]
+fn test_casts_apply_whitespace_collapse() {
+    // XML Schema whiteSpace facet is `collapse` for every non-string atomic
+    // type: leading/trailing whitespace must be stripped before the lexical
+    // form is parsed (QT3: K-SeqExprCast-536/588/1212). Regression: padded
+    // element text made xs:decimal()/xs:integer()/xs:boolean() and untyped
+    // arithmetic raise FORG0001.
+    for (expr, expected) in [
+        ("xs:decimal(' 10.01 ') eq 10.01", true),
+        ("xs:integer('	6789 ') eq 6789", true),
+        ("xs:boolean(' true ')", true),
+        ("xs:float(' 1.5 ') eq 1.5e0", true),
+        ("xs:double(' 1.5 ') eq 1.5e0", true),
+        // collapse only strips the edges — internal whitespace stays invalid
+        ("' 1 0 ' castable as xs:decimal", false),
+    ] {
+        let seq = run(expr).unwrap();
+        assert_eq!(
+            seq.effective_boolean_value().unwrap(),
+            expected,
+            "expr: {expr}"
+        );
+    }
+}
+
+#[test]
+fn test_descendant_or_self_from_attribute_includes_self() {
+    // XDM 5.4: descendant-or-self always includes the context node —
+    // attributes have no descendants, so the axis is exactly `self`.
+    // QT3: prod-AxisStep/Axes041-1.
+    let seq = run_xml("<r a=\"1\"/>", "count(/r/@a/descendant-or-self::node()) = 1").unwrap();
+    assert_eq!(seq.effective_boolean_value().unwrap(), true);
+}
+
+#[test]
 fn test_and_or_yield_booleans() {
     // The short-circuit lowering must still produce proper xs:boolean values
     // from the operands' effective boolean values.
